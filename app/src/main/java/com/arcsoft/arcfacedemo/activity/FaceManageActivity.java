@@ -14,6 +14,7 @@ import android.view.WindowManager;
 import android.widget.TextView;
 
 import com.arcsoft.arcfacedemo.R;
+import com.arcsoft.arcfacedemo.util.ImageUtil;
 import com.arcsoft.arcfacedemo.widget.ProgressDialog;
 import com.arcsoft.arcfacedemo.faceserver.FaceServer;
 import com.arcsoft.imageutil.ArcSoftImageFormat;
@@ -119,7 +120,8 @@ public class FaceManageActivity extends BaseActivity {
                         }
                     });
                     final File jpgFile = jpgFiles[i];
-                    Bitmap bitmap = BitmapFactory.decodeFile(jpgFile.getAbsolutePath());
+
+                    Bitmap bitmap = ImageUtil.fileToScaledBitmap(jpgFile, ImageUtil.DEFAULT_MAX_WIDTH, ImageUtil.DEFAULT_MAX_HEIGHT);
                     if (bitmap == null) {
                         File failedFile = new File(REGISTER_FAILED_DIR + File.separator + jpgFile.getName());
                         if (!failedFile.getParentFile().exists()) {
@@ -149,7 +151,7 @@ public class FaceManageActivity extends BaseActivity {
                         });
                         return;
                     }
-                    boolean success = FaceServer.getInstance().registerDataBase(FaceManageActivity.this, bgr24, bitmap.getWidth(), bitmap.getHeight(),
+                    boolean success = FaceServer.getInstance().registerBgr24(FaceManageActivity.this, bgr24, bitmap.getWidth(), bitmap.getHeight(),
                             jpgFile.getName().substring(0, jpgFile.getName().lastIndexOf(".")));
 //                    boolean success = FaceServer.getInstance().registerBgr24(FaceManageActivity.this, bgr24, bitmap.getWidth(), bitmap.getHeight(),
 //                            jpgFile.getName().substring(0, jpgFile.getName().lastIndexOf(".")));

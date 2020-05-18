@@ -4,53 +4,47 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
-import android.graphics.Bitmap;
 
-import com.arcsoft.arcfacedemo.dbutil.bean.FaceDataBaseInfo;
-
-import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 
 public class FaceDatabaseManager {
     //数据库名称
-    private static final String DATA_NAME = "faceData.bd";
+    private static final String DB_NAME = "SQLitefaceDB.db";
     //数据库版本
     private static final int DATABASE_VERSION = 1;
     //数据库
     private SQLiteDatabase db;
     //数据库表
-    private FaceDatabaseTable faceDataBaseTable;
+    private FaceDatabaseHelper faceDataBaseTable;
 
     public FaceDatabaseManager(Context context) {
         //CursorFactory设置为null,使用默认值
-        faceDataBaseTable = new FaceDatabaseTable(context, DATA_NAME, null, DATABASE_VERSION);
+        faceDataBaseTable = new FaceDatabaseHelper(context, DB_NAME, null, DATABASE_VERSION);
         db = faceDataBaseTable.getWritableDatabase();
     }
 
-    public void addFace(String faceName, byte[] faceFeature, Bitmap faceImg) {
+    public long addFace(String faceName, byte[] faceFeature, byte[] facePic) {
         //存人脸
         ContentValues values = new ContentValues();
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        faceImg.compress(Bitmap.CompressFormat.JPEG, 100, baos);
-        byte[] facePic = baos.toByteArray();
-        //写入User表
+        long index = -1;
+        //写入表
         try {
             values.put("faceName", faceName);
             values.put("faceFeature", faceFeature);
             values.put("facePic", facePic);
-            db.insert("User", null, values);
-            values.clear();
+            index = db.insert("Face", null, values);
         } catch (Exception e) {
             e.printStackTrace();
         }
+        return index;
     }
 
-    public ArrayList<FaceDataBaseInfo> selectAllFaces() {
-        ArrayList<FaceDataBaseInfo> dataList = new ArrayList<>();
-        Cursor cursor = db.query("User", null, null, null, null, null, null);
+    public ArrayList<FaceEntity> selectAllFaces() {
+        ArrayList<FaceEntity> dataList = new ArrayList<>();
+        Cursor cursor = db.query("Face", null, null, null, null, null, null);
         while (cursor.moveToNext()) {
-            FaceDataBaseInfo data = new FaceDataBaseInfo();
-            int id = cursor.getInt(cursor.getColumnIndex("_id"));
+            FaceEntity data = new FaceEntity();
+            int id = cursor.getInt(cursor.getColumnIndex("id"));
             String faceName = cursor.getString(cursor.getColumnIndex("faceName"));
             byte[] facePic = cursor.getBlob(cursor.getColumnIndex("facePic"));
             byte[] faceFeature = cursor.getBlob(cursor.getColumnIndex("faceFeature"));
@@ -65,10 +59,21 @@ public class FaceDatabaseManager {
     }
 
     public void deleteAllFace() {
-        db.execSQL("delete from User");
+        db.execSQL("delete from Face");
     }
 
     public void deleteFaceById(int id) {
-        db.delete("User", "_id=?", new String[]{"" + id});
+        db.delete("Face", "_id=?", new String[]{"" + id});
+    }
+
+    public void release() {
+        if (db != null) {
+            db.close();
+            db = null;
+        }
+        if (faceDataBaseTable != null) {
+            faceDataBaseTable.close();
+            faceDataBaseTable = null;
+        }
     }
 }

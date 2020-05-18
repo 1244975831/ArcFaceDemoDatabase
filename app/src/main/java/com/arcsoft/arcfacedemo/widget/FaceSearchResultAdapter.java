@@ -11,10 +11,8 @@ import android.widget.TextView;
 
 import com.arcsoft.arcfacedemo.R;
 import com.arcsoft.arcfacedemo.faceserver.CompareResult;
-import com.arcsoft.arcfacedemo.faceserver.FaceServer;
 import com.bumptech.glide.Glide;
 
-import java.io.File;
 import java.util.List;
 
 public class FaceSearchResultAdapter extends RecyclerView.Adapter<FaceSearchResultAdapter.CompareResultHolder> {

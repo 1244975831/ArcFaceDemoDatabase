@@ -4,13 +4,13 @@ import android.arch.persistence.room.ColumnInfo;
 import android.arch.persistence.room.Entity;
 import android.arch.persistence.room.PrimaryKey;
 
-//entity声明定义，并且指定了映射数据表明
-@Entity(tableName = "User")
-public class UserTable {
-    //设置主键，并且定义自增增
+// entity声明定义，并且指定了映射数据表明
+@Entity(tableName = "Face")
+public class FaceEntity {
+    // 设置主键，并且定义自增增
     @PrimaryKey(autoGenerate = true)
-    public int uid;
-    //字段映射具体的数据表字段名
+    public int id;
+    // 字段映射具体的数据表字段名
     @ColumnInfo(name = "faceName")
     private String faceName;
 
@@ -42,5 +42,13 @@ public class UserTable {
 
     public void setFacePic(byte[] facePic) {
         this.facePic = facePic;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 }

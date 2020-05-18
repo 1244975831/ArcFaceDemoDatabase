@@ -1,16 +1,11 @@
 package com.arcsoft.arcfacedemo.faceserver;
 
-import android.arch.persistence.room.Room;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.util.Log;
 
-import com.arcsoft.arcfacedemo.dbutil.AppDatabase;
-import com.arcsoft.arcfacedemo.dbutil.FaceDatabaseManager;
-import com.arcsoft.arcfacedemo.dbutil.UserDao;
-import com.arcsoft.arcfacedemo.dbutil.UserTable;
-import com.arcsoft.arcfacedemo.dbutil.bean.FaceDataBaseInfo;
+import com.arcsoft.arcfacedemo.dbutil.FaceEntity;
 import com.arcsoft.arcfacedemo.model.FaceRegisterInfo;
 import com.arcsoft.face.ErrorInfo;
 import com.arcsoft.face.FaceEngine;
@@ -26,9 +21,6 @@ import com.arcsoft.imageutil.ArcSoftRotateDegree;
 
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,17 +34,10 @@ public class FaceServer {
     private static FaceEngine faceEngine = null;
     private static FaceServer faceServer = null;
     private static List<FaceRegisterInfo> faceRegisterInfoList;
-    public static String ROOT_PATH;
-    private static FaceDatabaseManager faceDataBaseManager;
-    private static UserDao dao;
-    /**
-     * 存放注册图的目录
-     */
-    public static final String SAVE_IMG_DIR = "register" + File.separator + "imgs";
-    /**
-     * 存放特征的目录
-     */
-    private static final String SAVE_FEATURE_DIR = "register" + File.separator + "features";
+    // ROOM方式
+    private static FaceDatabaseAccessObject dao = new RoomFaceDao();
+    // 直接使用SQLite方式
+//    private static FaceDatabaseAccessObject dao = new SQLiteFaceDao();
 
     /**
      * 是否正在搜索人脸，保证搜索操作单线程进行
@@ -80,13 +65,12 @@ public class FaceServer {
         synchronized (this) {
             if (faceEngine == null && context != null) {
                 //数据库初始化
-                faceDataBaseManager = new FaceDatabaseManager(context);
-                dao = AppDatabase.getInstance(context).userDao();
+                dao.init();
                 faceEngine = new FaceEngine();
                 int engineCode = faceEngine.init(context, DetectMode.ASF_DETECT_MODE_IMAGE, DetectFaceOrientPriority.ASF_OP_0_ONLY, 16, 1, FaceEngine.ASF_FACE_RECOGNITION | FaceEngine.ASF_FACE_DETECT);
                 if (engineCode == ErrorInfo.MOK) {
 //                    initFaceList(context);
-                    initFaceListByDateBase();
+                    initFaceListByDataBase();
                     return true;
                 } else {
                     faceEngine = null;
@@ -111,89 +95,31 @@ public class FaceServer {
                 faceEngine.unInit();
                 faceEngine = null;
             }
-        }
-    }
-
-    /**
-     * 初始化人脸特征数据以及人脸特征数据对应的注册图
-     *
-     * @param context 上下文对象
-     */
-    private void initFaceList(Context context) {
-        synchronized (this) {
-            if (ROOT_PATH == null) {
-                ROOT_PATH = context.getFilesDir().getAbsolutePath();
-            }
-            File featureDir = new File(ROOT_PATH + File.separator + SAVE_FEATURE_DIR);
-            if (!featureDir.exists() || !featureDir.isDirectory()) {
-                return;
-            }
-            File[] featureFiles = featureDir.listFiles();
-            if (featureFiles == null || featureFiles.length == 0) {
-                return;
-            }
-            faceRegisterInfoList = new ArrayList<>();
-            for (File featureFile : featureFiles) {
-                try {
-                    FileInputStream fis = new FileInputStream(featureFile);
-                    byte[] feature = new byte[FaceFeature.FEATURE_SIZE];
-                    fis.read(feature);
-                    fis.close();
-                    faceRegisterInfoList.add(new FaceRegisterInfo(feature, featureFile.getName()));
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+            if (dao != null) {
+                dao.release();
             }
         }
     }
 
 
-    private void initFaceListByDateBase() {
-        synchronized (this) {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    faceRegisterInfoList = new ArrayList<>();
-                    //原生
-//            List<FaceDataBaseInfo> faceDataBaseInfoList = faceDataBaseManager.selectAllFaces();
-//            for (FaceDataBaseInfo faceDataBaseInfo : faceDataBaseInfoList) {
-//                faceRegisterInfoList.add(new FaceRegisterInfo(faceDataBaseInfo.getFaceFeature(), faceDataBaseInfo.getFaceName()));
-//            }
-                    //room
-                    List<UserTable> userTableList = dao.getAllFace();
-                    for (UserTable userInfo : userTableList) {
-                        faceRegisterInfoList.add(new FaceRegisterInfo(userInfo.getFaceFeature(), userInfo.getFaceName(), userInfo.getFacePic()));
-                    }
+    private void initFaceListByDataBase() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                long start = System.currentTimeMillis();
+                faceRegisterInfoList = new ArrayList<>();
+                List<FaceEntity> userTableList = dao.getAll();
+                for (FaceEntity userInfo : userTableList) {
+                    faceRegisterInfoList.add(new FaceRegisterInfo(userInfo.getFaceFeature(), userInfo.getFaceName(), userInfo.getFacePic()));
                 }
-            }).start();
-        }
+                Log.i(TAG, "run: " + (System.currentTimeMillis() - start));
+            }
+        }).start();
     }
 
     public int getFaceNumber(Context context) {
-//        return faceDataBaseManager.selectAllFaces().size();
+        
         return faceRegisterInfoList == null ? 0 : faceRegisterInfoList.size();
-//        synchronized (this) {
-//            if (context == null) {
-//                return 0;
-//            }
-//            if (ROOT_PATH == null) {
-//                ROOT_PATH = context.getFilesDir().getAbsolutePath();
-//            }
-//
-//            File featureFileDir = new File(ROOT_PATH + File.separator + SAVE_FEATURE_DIR);
-//            int featureCount = 0;
-//            if (featureFileDir.exists() && featureFileDir.isDirectory()) {
-//                String[] featureFiles = featureFileDir.list();
-//                featureCount = featureFiles == null ? 0 : featureFiles.length;
-//            }
-//            int imageCount = 0;
-//            File imgFileDir = new File(ROOT_PATH + File.separator + SAVE_IMG_DIR);
-//            if (imgFileDir.exists() && imgFileDir.isDirectory()) {
-//                String[] imageFiles = imgFileDir.list();
-//                imageCount = imageFiles == null ? 0 : imageFiles.length;
-//            }
-//            return featureCount > imageCount ? imageCount : featureCount;
-//        }
     }
 
     public int clearAllFaces(Context context) {
@@ -201,53 +127,24 @@ public class FaceServer {
             if (context == null) {
                 return 0;
             }
-            if (ROOT_PATH == null) {
-                ROOT_PATH = context.getFilesDir().getAbsolutePath();
-            }
             int number = 0;
             if (faceRegisterInfoList != null) {
                 number = faceRegisterInfoList.size();
                 faceRegisterInfoList.clear();
             }
-//            number = faceDataBaseManager.selectAllFaces().size();
-//            faceDataBaseManager.deleteAllFace();
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    dao.deleteAll();
+                    dao.clearAll();
                 }
             }).start();
-//            File featureFileDir = new File(ROOT_PATH + File.separator + SAVE_FEATURE_DIR);
-//            int deletedFeatureCount = 0;
-//            if (featureFileDir.exists() && featureFileDir.isDirectory()) {
-//                File[] featureFiles = featureFileDir.listFiles();
-//                if (featureFiles != null && featureFiles.length > 0) {
-//                    for (File featureFile : featureFiles) {
-//                        if (featureFile.delete()) {
-//                            deletedFeatureCount++;
-//                        }
-//                    }
-//                }
-//            }
-//            int deletedImageCount = 0;
-//            File imgFileDir = new File(ROOT_PATH + File.separator + SAVE_IMG_DIR);
-//            if (imgFileDir.exists() && imgFileDir.isDirectory()) {
-//                File[] imgFiles = imgFileDir.listFiles();
-//                if (imgFiles != null && imgFiles.length > 0) {
-//                    for (File imgFile : imgFiles) {
-//                        if (imgFile.delete()) {
-//                            deletedImageCount++;
-//                        }
-//                    }
-//                }
-//            }
-//            return deletedFeatureCount > deletedImageCount ? deletedImageCount : deletedFeatureCount;
             return number;
         }
     }
 
     /**
      * 用于预览时注册人脸
+     * TODO: 对于人脸库中人脸较多的场景，请将注册图存储至本地，数据库中仅保留文件路径，否则会占用很多内存
      *
      * @param context  上下文对象
      * @param nv21     NV21数据
@@ -264,21 +161,6 @@ public class FaceServer {
                 return false;
             }
 
-            if (ROOT_PATH == null) {
-                ROOT_PATH = context.getFilesDir().getAbsolutePath();
-            }
-            //特征存储的文件夹
-            File featureDir = new File(ROOT_PATH + File.separator + SAVE_FEATURE_DIR);
-            if (!featureDir.exists() && !featureDir.mkdirs()) {
-                Log.e(TAG, "registerNv21: can not create feature directory");
-                return false;
-            }
-            //图片存储的文件夹
-            File imgDir = new File(ROOT_PATH + File.separator + SAVE_IMG_DIR);
-            if (!imgDir.exists() && !imgDir.mkdirs()) {
-                Log.e(TAG, "registerNv21: can not create image directory");
-                return false;
-            }
             FaceFeature faceFeature = new FaceFeature();
             //特征提取
             int code = faceEngine.extractFaceFeature(nv21, width, height, FaceEngine.CP_PAF_NV21, faceInfo, faceFeature);
@@ -302,26 +184,26 @@ public class FaceServer {
                     cropRect.right &= ~3;
                     cropRect.bottom &= ~3;
 
-                    File file = new File(imgDir + File.separator + userName + IMG_SUFFIX);
-
-
                     // 创建一个头像的Bitmap，存放旋转结果图
                     Bitmap headBmp = getHeadImage(nv21, width, height, faceInfo.getOrient(), cropRect, ArcSoftImageFormat.NV21);
 
-                    FileOutputStream fosImage = new FileOutputStream(file);
-                    headBmp.compress(Bitmap.CompressFormat.JPEG, 100, fosImage);
-                    fosImage.close();
+                    ByteArrayOutputStream baosImage = new ByteArrayOutputStream();
+                    headBmp.compress(Bitmap.CompressFormat.JPEG, 50, baosImage);
+                    byte[] imageData = baosImage.toByteArray();
+                    baosImage.close();
 
 
-                    FileOutputStream fosFeature = new FileOutputStream(featureDir + File.separator + userName);
-                    fosFeature.write(faceFeature.getFeatureData());
-                    fosFeature.close();
+                    FaceEntity user = new FaceEntity();
+                    user.setFaceName(userName);
+                    user.setFaceFeature(faceFeature.getFeatureData());
+                    user.setFacePic(imageData);
+                    dao.insert(user);
 
                     //内存中的数据同步
                     if (faceRegisterInfoList == null) {
                         faceRegisterInfoList = new ArrayList<>();
                     }
-                    faceRegisterInfoList.add(new FaceRegisterInfo(faceFeature.getFeatureData(), userName));
+                    faceRegisterInfoList.add(new FaceRegisterInfo(faceFeature.getFeatureData(), userName, imageData));
                     return true;
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -334,6 +216,7 @@ public class FaceServer {
 
     /**
      * 用于注册照片人脸
+     * TODO: 对于人脸库中人脸较多的场景，请将注册图存储至本地，数据库中仅保留文件路径，否则会占用很多内存
      *
      * @param context 上下文对象
      * @param bgr24   bgr24数据
@@ -346,115 +229,6 @@ public class FaceServer {
         synchronized (this) {
             if (faceEngine == null || context == null || bgr24 == null || width % 4 != 0 || bgr24.length != width * height * 3) {
                 Log.e(TAG, "registerBgr24:  invalid params");
-                return false;
-            }
-
-            if (ROOT_PATH == null) {
-                ROOT_PATH = context.getFilesDir().getAbsolutePath();
-            }
-            //特征存储的文件夹
-            File featureDir = new File(ROOT_PATH + File.separator + SAVE_FEATURE_DIR);
-            if (!featureDir.exists() && !featureDir.mkdirs()) {
-                Log.e(TAG, "registerBgr24: can not create feature directory");
-                return false;
-            }
-            //图片存储的文件夹
-            File imgDir = new File(ROOT_PATH + File.separator + SAVE_IMG_DIR);
-            if (!imgDir.exists() && !imgDir.mkdirs()) {
-                Log.e(TAG, "registerBgr24: can not create image directory");
-                return false;
-            }
-            //人脸检测
-            List<FaceInfo> faceInfoList = new ArrayList<>();
-            int code = faceEngine.detectFaces(bgr24, width, height, FaceEngine.CP_PAF_BGR24, faceInfoList);
-            if (code == ErrorInfo.MOK && faceInfoList.size() > 0) {
-                FaceFeature faceFeature = new FaceFeature();
-
-                //特征提取
-                code = faceEngine.extractFaceFeature(bgr24, width, height, FaceEngine.CP_PAF_BGR24, faceInfoList.get(0), faceFeature);
-                String userName = name == null ? String.valueOf(System.currentTimeMillis()) : name;
-                try {
-                    //保存注册结果（注册图、特征数据）
-                    if (code == ErrorInfo.MOK) {
-                        //为了美观，扩大rect截取注册图
-                        Rect cropRect = getBestRect(width, height, faceInfoList.get(0).getRect());
-                        if (cropRect == null) {
-                            Log.e(TAG, "registerBgr24: cropRect is null");
-                            return false;
-                        }
-
-                        cropRect.left &= ~3;
-                        cropRect.top &= ~3;
-                        cropRect.right &= ~3;
-                        cropRect.bottom &= ~3;
-
-                        File file = new File(imgDir + File.separator + userName + IMG_SUFFIX);
-                        FileOutputStream fosImage = new FileOutputStream(file);
-
-
-                        // 创建一个头像的Bitmap，存放旋转结果图
-                        Bitmap headBmp = getHeadImage(bgr24, width, height, faceInfoList.get(0).getOrient(), cropRect, ArcSoftImageFormat.BGR24);
-                        // 保存到本地
-                        headBmp.compress(Bitmap.CompressFormat.JPEG, 100, fosImage);
-                        fosImage.close();
-
-                        // 保存特征数据
-                        FileOutputStream fosFeature = new FileOutputStream(featureDir + File.separator + userName);
-                        fosFeature.write(faceFeature.getFeatureData());
-                        fosFeature.close();
-
-                        // 内存中的数据同步
-                        if (faceRegisterInfoList == null) {
-                            faceRegisterInfoList = new ArrayList<>();
-                        }
-                        faceRegisterInfoList.add(new FaceRegisterInfo(faceFeature.getFeatureData(), userName));
-                        return true;
-                    } else {
-                        Log.e(TAG, "registerBgr24: extract face feature failed, code is " + code);
-                        return false;
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    return false;
-                }
-            } else {
-                Log.e(TAG, "registerBgr24: no face detected, code is " + code);
-                return false;
-            }
-        }
-
-    }
-
-    /**
-     * 用于注册照片人脸
-     *
-     * @param context 上下文对象
-     * @param bgr24   bgr24数据
-     * @param width   bgr24宽度
-     * @param height  bgr24高度
-     * @param name    保存的名字，若为空则使用时间戳
-     * @return 是否注册成功
-     */
-    public boolean registerDataBase(Context context, byte[] bgr24, int width, int height, String name) {
-        synchronized (this) {
-            if (faceEngine == null || context == null || bgr24 == null || width % 4 != 0 || bgr24.length != width * height * 3) {
-                Log.e(TAG, "registerBgr24:  invalid params");
-                return false;
-            }
-
-            if (ROOT_PATH == null) {
-                ROOT_PATH = context.getFilesDir().getAbsolutePath();
-            }
-            //特征存储的文件夹
-            File featureDir = new File(ROOT_PATH + File.separator + SAVE_FEATURE_DIR);
-            if (!featureDir.exists() && !featureDir.mkdirs()) {
-                Log.e(TAG, "registerBgr24: can not create feature directory");
-                return false;
-            }
-            //图片存储的文件夹
-            File imgDir = new File(ROOT_PATH + File.separator + SAVE_IMG_DIR);
-            if (!imgDir.exists() && !imgDir.mkdirs()) {
-                Log.e(TAG, "registerBgr24: can not create image directory");
                 return false;
             }
             //人脸检测
@@ -482,19 +256,16 @@ public class FaceServer {
 
                     // 创建一个头像的Bitmap，存放旋转结果图
                     Bitmap headBmp = getHeadImage(bgr24, width, height, faceInfoList.get(0).getOrient(), cropRect, ArcSoftImageFormat.BGR24);
-                    //录入人脸
-                    //原生注册
-//                    faceDataBaseManager.addFace(userName, faceFeature.getFeatureData(), headBmp);
-                    //room注册
+                    // 录入人脸
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    headBmp.compress(Bitmap.CompressFormat.JPEG, 100, baos);
+                    headBmp.compress(Bitmap.CompressFormat.JPEG, 50, baos);
                     byte[] facePic = baos.toByteArray();
 
-                    UserTable user = new UserTable();
+                    FaceEntity user = new FaceEntity();
                     user.setFaceName(userName);
                     user.setFaceFeature(faceFeature.getFeatureData());
                     user.setFacePic(facePic);
-                    dao.addFace(user);
+                    dao.insert(user);
 
                     // 内存中的数据同步
                     if (faceRegisterInfoList == null) {
@@ -602,7 +373,6 @@ public class FaceServer {
         }
         isProcessing = false;
         if (maxSimilarIndex != -1) {
-//            return new CompareResult(faceRegisterInfoList.get(maxSimilarIndex).getName(), maxSimilar);
             return new CompareResult(faceRegisterInfoList.get(maxSimilarIndex).getName(), maxSimilar, faceRegisterInfoList.get(maxSimilarIndex).getFacePic());
         }
         return null;

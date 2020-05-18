@@ -8,20 +8,20 @@ import android.arch.persistence.room.Query;
 import java.util.List;
 
 @Dao
-public interface UserDao {
+public interface FaceDao {
     //返回Long数据表示，插入条目的主键值（uid）
     @Insert
-    Long addFace(UserTable user);
+    Long addFace(FaceEntity user);
 
     //获取所有人脸数据
-    @Query("SELECT * FROM User")
-    List<UserTable> getAllFace();
+    @Query("SELECT * FROM Face")
+    List<FaceEntity> getAllFace();
 
     //删除所有人脸数据
-    @Delete
-    int deleteAll(UserTable... users);
+    @Query("DELETE FROM Face")
+    int deleteAll();
 
     //删除指定人脸
     @Delete
-    int delete(UserTable user);
+    int delete(FaceEntity user);
 }
