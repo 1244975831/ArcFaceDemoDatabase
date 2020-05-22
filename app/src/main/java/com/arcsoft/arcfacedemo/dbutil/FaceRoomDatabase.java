@@ -19,13 +19,13 @@ public abstract class FaceRoomDatabase extends RoomDatabase {
             synchronized (FaceRoomDatabase.class) {
                 if (instance == null) {
                     instance = Room.databaseBuilder(context.getApplicationContext(), FaceRoomDatabase.class, "RoomFaceDB.db")
-                            .allowMainThreadQueries()
                             .build();
                 }
             }
         }
         return instance;
     }
+
     public void release(){
         if (instance != null){
             instance.release();

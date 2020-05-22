@@ -63,7 +63,7 @@ public class FaceDatabaseManager {
     }
 
     public void deleteFaceById(int id) {
-        db.delete("Face", "_id=?", new String[]{"" + id});
+        db.delete("Face", "id=?", new String[]{"" + id});
     }
 
     public void release() {
